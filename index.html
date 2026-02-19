@@ -3,21 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Weather × Kalshi Hub (Live)</title>
+  <title>Kalshi Weather Watchlist</title>
   <style>
     :root{
       --bg1:#0f172a; --bg2:#1e293b;
       --card:rgba(255,255,255,.06);
       --border:rgba(255,255,255,.12);
       --muted:#cbd5e1; --muted2:#94a3b8;
-      --accent:#2563eb; --good:#22c55e; --bad:#ef4444; --warn:#f59e0b;
+      --accent:#2563eb;
     }
     body{margin:0;font-family:Arial,Helvetica,sans-serif;background:linear-gradient(135deg,var(--bg1),var(--bg2));color:#fff}
-    .wrap{max-width:1250px;margin:0 auto;padding:26px 14px 70px}
+    .wrap{max-width:1200px;margin:0 auto;padding:26px 14px 70px}
     h1{margin:0 0 6px;font-size:32px}
     .sub{color:var(--muted2);margin:0 0 14px;line-height:1.5}
     .grid{display:grid;grid-template-columns:1fr;gap:14px}
-    @media(min-width: 980px){ .grid{grid-template-columns: 1.05fr .95fr;} }
     .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
     input,button,textarea{font:inherit}
@@ -39,112 +38,87 @@
     th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
     th{font-size:12px;color:var(--muted2);font-weight:800}
     td{font-size:14px}
-    .badge{display:inline-block;font-size:12px;padding:3px 8px;border-radius:999px;font-weight:900}
-    .b-good{background:rgba(34,197,94,.18);border:1px solid rgba(34,197,94,.45);color:#bbf7d0}
-    .b-bad{background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.45);color:#fecaca}
-    .b-warn{background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.45);color:#fde68a}
     a{color:#c7d2fe}
-    iframe{width:100%;height:520px;border:1px solid var(--border);border-radius:14px;background:rgba(0,0,0,.08)}
     code{background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Weather × Kalshi Hub (Live)</h1>
+  <h1>Kalshi × Weather Watchlist</h1>
   <p class="sub">
-    Pulls <b>current open markets</b> from Kalshi by <b>series ticker</b> and matches weather to the <b>exact station</b> you specify
-    (ex: CLIMDW → KMDW). Uses your Cloudflare proxy for API calls.
+    Add the markets you’re watching + the exact station Kalshi uses (ex: CLIMDW → <code>KMDW</code>).
+    This shows market prices + station obs + station forecast in one place.
   </p>
 
   <div class="card">
     <div class="row">
       <div class="pill">Proxy (Cloudflare Worker URL):</div>
       <input id="proxy" placeholder="https://your-worker.workers.dev" style="min-width:360px;flex:1">
-      <div class="pill">Auto-refresh:</div>
-      <input id="refreshSec" type="number" min="10" step="5" value="60" style="width:90px">
       <button id="save" class="primary">Save</button>
-      <button id="refresh">Refresh now</button>
+      <button id="refresh">Refresh</button>
       <span id="status" class="tiny"></span>
     </div>
     <div class="tiny" style="margin-top:8px">
-      If Kalshi embeds are blocked, click the market link. Prices still load via API through your proxy.
+      Proxy is required for Kalshi API calls. Weather uses NWS station endpoints.
     </div>
   </div>
 
-  <div class="grid" style="margin-top:14px">
-
-    <!-- LEFT: CONFIG + LIVE TABLE -->
-    <div class="card">
-      <div class="row" style="justify-content:space-between">
-        <strong>Live Markets (auto)</strong>
-        <span id="leftStatus" class="tiny"></span>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="tiny muted" style="margin-bottom:8px">
-        Configure series tickers + exact station IDs. Example: CLIMDW → <code>KMDW</code>, CLIMORD → <code>KORD</code>.
-      </div>
-
-      <textarea id="configJson"></textarea>
-
-      <div class="row" style="margin-top:10px">
-        <button id="saveConfig" class="primary">Save config</button>
-        <button id="loadSample">Load sample</button>
-      </div>
-
-      <div class="divider"></div>
-
-      <div id="seriesCards"></div>
-
-      <div class="divider"></div>
-
-      <div style="overflow:auto">
-        <table>
-          <thead>
-            <tr>
-              <th>Market</th>
-              <th>Series</th>
-              <th>Close</th>
-              <th>YES Bid</th>
-              <th>YES Ask</th>
-              <th>Implied P</th>
-              <th>Station</th>
-              <th>Obs Now</th>
-              <th>Fcst High</th>
-              <th>Fcst Low</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
+  <div class="card" style="margin-top:14px">
+    <strong>Watchlist (easy to edit)</strong>
+    <div class="tiny muted2" style="margin-top:6px">
+      Each item: <code>ticker</code>, <code>kalshiUrl</code>, <code>stationId</code>, optional <code>label</code>.
+      Example station: Midway = <code>KMDW</code>, O’Hare = <code>KORD</code>.
     </div>
+    <div class="divider"></div>
+    <textarea id="watchJson"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="saveWatch" class="primary">Save watchlist</button>
+      <button id="loadSample">Load sample</button>
+    </div>
+  </div>
 
-    <!-- RIGHT: MARKET VIEW -->
-    <div class="card">
-      <div class="row" style="justify-content:space-between">
-        <strong>Market View</strong>
-        <span id="rightStatus" class="tiny"></span>
-      </div>
-      <div class="divider"></div>
+  <div class="card" style="margin-top:14px">
+    <div class="row" style="justify-content:space-between">
+      <strong>Live View</strong>
+      <span id="counts" class="tiny"></span>
+    </div>
+    <div class="divider"></div>
 
-      <div class="tiny muted2" style="margin:6px 0 10px">
-        Click any market row to load it here.
-      </div>
-
-      <div id="marketFrameWrap"></div>
+    <div style="overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Market</th>
+            <th>YES Bid</th>
+            <th>YES Ask</th>
+            <th>Implied P</th>
+            <th>Station</th>
+            <th>Obs Now</th>
+            <th>Forecast High</th>
+            <th>Forecast Low</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
     </div>
   </div>
 </div>
 
 <script>
-/* ---------------- Storage ---------------- */
+/* ------------ Storage ------------ */
 const KEY = {
-  proxy: "hub_proxy_v3",
-  refreshSec: "hub_refreshSec_v3",
-  config: "hub_config_v3",
-  selectedMarket: "hub_selectedMarket_v3",
+  proxy: "wl_proxy_v1",
+  watch: "wl_watch_v1",
 };
+
+const SAMPLE_WATCH = [
+  {
+    "label": "Chicago Low Temp (CLIMDW)",
+    "ticker": "KXLOWTCHI-26FEB18",
+    "kalshiUrl": "https://kalshi.com/markets/kxlowtchi/lowest-temperature-chicago/kxlowtchi-26feb18",
+    "stationId": "KMDW"
+  }
+];
 
 const $ = (id) => document.getElementById(id);
 
@@ -157,9 +131,6 @@ function loadJSON(key, fallback){
 }
 function saveJSON(key, value){ localStorage.setItem(key, JSON.stringify(value, null, 2)); }
 
-function esc(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-
-/* ---------------- Proxy helpers ---------------- */
 function proxyWrap(url){
   const p = $("proxy").value.trim();
   if (!p) return url;
@@ -174,51 +145,23 @@ async function fetchJSON(url){
   return await res.json();
 }
 
-/* ---------------- Kalshi: list markets by series ----------------
-   Uses: GET /trade-api/v2/markets?series_ticker=...&status=open&min_close_ts=...
-*/
-async function fetchKalshiMarketsBySeries({ seriesTicker, status="open", minCloseTs=null, limit=200 }) {
-  const all = [];
-  let cursor = "";
-  while (true) {
-    const u = new URL("https://api.elections.kalshi.com/trade-api/v2/markets");
-    u.searchParams.set("limit", String(limit));
-    u.searchParams.set("series_ticker", seriesTicker);
-    if (status) u.searchParams.set("status", status);
-    if (minCloseTs) u.searchParams.set("min_close_ts", String(minCloseTs));
-    if (cursor) u.searchParams.set("cursor", cursor);
-
-    const data = await fetchJSON(proxyWrap(u.toString()));
-    const markets = data?.markets || [];
-    all.push(...markets);
-
-    cursor = data?.cursor || "";
-    if (!cursor) break;
-  }
-  return all;
+function pct(x){
+  if(x == null || Number.isNaN(x)) return "—";
+  return (x*100).toFixed(1) + "%";
 }
 
-/* ---------------- Kalshi: orderbook top-of-book ---------------- */
 function extractTopOfBook(orderbookJson){
   const ob = orderbookJson?.orderbook || orderbookJson;
-
   let yesBids = ob?.yes?.bids || ob?.yes_bids || ob?.yesBids || [];
   let yesAsks = ob?.yes?.asks || ob?.yes_asks || ob?.yesAsks || [];
-
   const bestBid = yesBids?.[0];
   const bestAsk = yesAsks?.[0];
-
   const bid = Array.isArray(bestBid) ? bestBid[0] : bestBid?.price;
   const ask = Array.isArray(bestAsk) ? bestAsk[0] : bestAsk?.price;
-
   const bidNum = (bid == null ? null : Number(bid));
   const askNum = (ask == null ? null : Number(ask));
-
-  const normalize = (x) => (x > 1 ? x/100 : x); // cents -> 0..1
-  return {
-    yesBid: bidNum == null ? null : normalize(bidNum),
-    yesAsk: askNum == null ? null : normalize(askNum),
-  };
+  const normalize = (x) => (x > 1 ? x/100 : x);
+  return { yesBid: bidNum == null ? null : normalize(bidNum), yesAsk: askNum == null ? null : normalize(askNum) };
 }
 
 function impliedProb(yesBid, yesAsk){
@@ -227,18 +170,6 @@ function impliedProb(yesBid, yesAsk){
   return (yesBid != null ? yesBid : yesAsk);
 }
 
-function pct(x){
-  if(x == null || Number.isNaN(x)) return "—";
-  return (x*100).toFixed(1) + "%";
-}
-
-/* ---------------- NWS: exact station weather ----------------
-   We do:
-   1) GET /stations/{id} -> geometry coords
-   2) GET /points/{lat},{lon} -> forecast url
-   3) GET forecast -> pick first daytime (high) + first night (low)
-   4) GET /stations/{id}/observations/latest -> current observed temp
-*/
 function pickHighLow(periods){
   let high=null, low=null;
   for(const p of periods){
@@ -249,312 +180,149 @@ function pickHighLow(periods){
   }
   return { high, low };
 }
+
+function fmtForecastTemp(p){
+  if(!p || p.temperature == null) return "—";
+  if((p.temperatureUnit||"").toUpperCase() === "F") return Math.round(Number(p.temperature)) + "°F";
+  return "—";
+}
+
 function fmtTempF(tempC){
   if(tempC == null) return "—";
   const f = (tempC * 9/5) + 32;
   return Math.round(f) + "°F";
 }
-function fmtForecastTemp(p){
-  if(!p || p.temperature == null) return "—";
-  // NWS forecast temps often already in F
-  if((p.temperatureUnit||"").toUpperCase() === "F") return Math.round(Number(p.temperature)) + "°F";
-  return "—";
-}
 
-async function fetchStationBundle(stationId){
-  // station metadata
+async function fetchStationWeather(stationId){
+  // station metadata -> coords
   const st = await fetchJSON(proxyWrap(`https://api.weather.gov/stations/${stationId}`));
   const coords = st?.geometry?.coordinates;
   if(!coords || coords.length < 2) throw new Error("Station geometry missing");
   const lon = coords[0], lat = coords[1];
 
-  // forecast
+  // forecast via points
   const points = await fetchJSON(proxyWrap(`https://api.weather.gov/points/${lat},${lon}`));
   const forecastUrl = points?.properties?.forecast;
-  if(!forecastUrl) throw new Error("NWS points missing forecast url");
-
+  if(!forecastUrl) throw new Error("Missing forecast url");
   const forecast = await fetchJSON(proxyWrap(forecastUrl));
   const periods = forecast?.properties?.periods;
   if(!Array.isArray(periods) || !periods.length) throw new Error("No forecast periods");
   const hl = pickHighLow(periods);
 
-  // latest observation
+  // latest obs
   let obsNowF = "—";
-  let obsTime = "";
   try{
     const obs = await fetchJSON(proxyWrap(`https://api.weather.gov/stations/${stationId}/observations/latest`));
     const c = obs?.properties?.temperature?.value; // Celsius
     obsNowF = fmtTempF(c);
-    obsTime = obs?.properties?.timestamp ? new Date(obs.properties.timestamp).toLocaleString() : "";
-  }catch{
-    // keep as —
-  }
-
-  const name = st?.properties?.name || stationId;
-  const fcHigh = fmtForecastTemp(hl.high);
-  const fcLow  = fmtForecastTemp(hl.low);
+  }catch{}
 
   return {
-    stationId,
-    stationName: name,
-    lat, lon,
-    fcHigh, fcLow,
+    stationName: st?.properties?.name || stationId,
     obsNowF,
-    obsTime
+    fcHigh: fmtForecastTemp(hl.high),
+    fcLow: fmtForecastTemp(hl.low),
   };
 }
-
-/* ---------------- UI: market view ---------------- */
-function loadMarketFrame(url){
-  const wrap = $("marketFrameWrap");
-  wrap.innerHTML = "";
-
-  const frame = document.createElement("iframe");
-  frame.src = url;
-
-  const fallback = document.createElement("div");
-  fallback.className = "tiny";
-  fallback.style.marginTop = "8px";
-  fallback.innerHTML = `If embed is blocked, <a href="${esc(url)}" target="_blank" rel="noreferrer">open market in new tab</a>.`;
-
-  wrap.appendChild(frame);
-  wrap.appendChild(fallback);
-}
-
-/* ---------------- Default config (EDIT THIS) ---------------- */
-const SAMPLE_CONFIG = {
-  "mode": "series",
-  "status": "open",
-  "daysAhead": 10,
-  "series": [
-    {
-      "seriesTicker": "KXLOWTCHI",
-      "stationId": "KMDW",
-      "label": "Chicago Low Temp (CLIMDW → KMDW)"
-    }
-  ]
-};
-
-/* ---------------- Main refresh ---------------- */
-let refreshTimer = null;
 
 function setStatus(msg){ $("status").textContent = msg; }
 
 async function refreshAll(){
-  try{
-    $("leftStatus").textContent = "Loading…";
-    $("rightStatus").textContent = "";
-    setStatus("Refreshing…");
+  setStatus("Refreshing…");
+  const rowsEl = $("rows");
+  rowsEl.innerHTML = "";
 
-    const proxy = $("proxy").value.trim();
-    if(!proxy){
-      setStatus("Set your proxy URL and Save.");
-      $("leftStatus").textContent = "Needs proxy";
-      return;
-    }
+  const watch = loadJSON(KEY.watch, SAMPLE_WATCH);
+  let okPrices = 0, okWx = 0;
 
-    // Load config
-    const cfg = loadJSON(KEY.config, SAMPLE_CONFIG);
-    $("configJson").value = JSON.stringify(cfg, null, 2);
+  for(const item of watch){
+    const label = item.label || item.ticker || "Market";
+    const ticker = String(item.ticker || "").toUpperCase();
+    const kalshiUrl = item.kalshiUrl || "https://kalshi.com/";
+    const stationId = String(item.stationId || "").toUpperCase();
 
-    const mode = cfg?.mode || "series";
-    if(mode !== "series") throw new Error("Config mode must be 'series'");
-
-    const status = cfg?.status || "open";
-    const daysAhead = Number(cfg?.daysAhead ?? 10);
-    const seriesList = Array.isArray(cfg?.series) ? cfg.series : [];
-
-    if(seriesList.length === 0) throw new Error("No series configured");
-
-    // Pre-fetch station bundles (exact locations)
-    const stationCache = new Map();
-    $("seriesCards").innerHTML = "";
-
-    for(const s of seriesList){
-      const stationId = String(s.stationId || "").toUpperCase().trim();
-      const seriesTicker = String(s.seriesTicker || "").toUpperCase().trim();
-      if(!stationId || !seriesTicker) continue;
-
-      let bundle;
-      try{
-        bundle = await fetchStationBundle(stationId);
-        stationCache.set(seriesTicker, bundle);
-
-        const card = document.createElement("div");
-        card.className = "card";
-        card.style.marginBottom = "10px";
-        card.innerHTML = `
-          <div class="row" style="justify-content:space-between">
-            <div>
-              <strong>${esc(s.label || seriesTicker)}</strong>
-              <div class="tiny muted2">${esc(seriesTicker)} • Station: ${esc(bundle.stationId)} (${esc(bundle.stationName)})</div>
-            </div>
-            <span class="pill">Obs: ${esc(bundle.obsNowF)}</span>
-          </div>
-          <div class="tiny muted2" style="margin-top:6px">
-            Forecast High: <b>${esc(bundle.fcHigh)}</b> • Forecast Low: <b>${esc(bundle.fcLow)}</b>
-            ${bundle.obsTime ? " • Obs time: " + esc(bundle.obsTime) : ""}
-          </div>
-        `;
-        $("seriesCards").appendChild(card);
-      }catch(e){
-        const card = document.createElement("div");
-        card.className = "card";
-        card.style.marginBottom = "10px";
-        card.innerHTML = `
-          <div class="row" style="justify-content:space-between">
-            <div>
-              <strong>${esc(s.label || seriesTicker)}</strong>
-              <div class="tiny muted2">${esc(seriesTicker)} • Station: ${esc(stationId)}</div>
-            </div>
-            <span class="badge b-bad">Station fetch failed</span>
-          </div>
-          <div class="tiny" style="margin-top:6px">${esc(e.message || e)}</div>
-        `;
-        $("seriesCards").appendChild(card);
-      }
-    }
-
-    // Pull markets for each series (current markets)
-    const nowTs = Math.floor(Date.now()/1000);
-    const maxCloseTs = nowTs + daysAhead * 86400;
-
-    const marketsAll = [];
-    for(const s of seriesList){
-      const seriesTicker = String(s.seriesTicker || "").toUpperCase().trim();
-      if(!seriesTicker) continue;
-      const mkts = await fetchKalshiMarketsBySeries({
-        seriesTicker,
-        status,
-        minCloseTs: nowTs
-      });
-
-      // Filter next N days by close_time (if present)
-      const filtered = mkts.filter(m => {
-        const close = m.close_time ? Math.floor(new Date(m.close_time).getTime()/1000) : null;
-        return close == null ? true : close <= maxCloseTs;
-      });
-
-      filtered.forEach(m => marketsAll.push({ seriesTicker, m }));
-    }
-
-    // Render rows
-    const tbody = $("rows");
-    tbody.innerHTML = "";
-    let pricesFetched = 0;
-
-    // Keep requests reasonable: fetch orderbooks sequentially
-    for(const item of marketsAll){
-      const seriesTicker = item.seriesTicker;
-      const m = item.m;
-
-      const ticker = m.ticker || "";
-      const title = m.title || ticker;
-      const closeTime = m.close_time ? new Date(m.close_time).toLocaleString() : "—";
-
-      // Market page URL guess: if it fails, user can still open by searching
-      // (Kalshi URLs vary; ticker is always correct)
-      const marketUrl = `https://kalshi.com/markets/${String(ticker).toLowerCase()}`;
-
-      // Orderbook URL (public)
-      const orderbookUrl = `https://api.elections.kalshi.com/trade-api/v2/markets/${ticker}/orderbook`;
-
-      // Fetch top-of-book
-      let yesBid=null, yesAsk=null, imp=null;
-      try{
-        const ob = await fetchJSON(proxyWrap(orderbookUrl));
+    // Kalshi orderbook
+    let yesBid=null, yesAsk=null, imp=null;
+    try{
+      if(ticker){
+        const obUrl = `https://api.elections.kalshi.com/trade-api/v2/markets/${ticker}/orderbook`;
+        const ob = await fetchJSON(proxyWrap(obUrl));
         const tob = extractTopOfBook(ob);
         yesBid = tob.yesBid; yesAsk = tob.yesAsk;
         imp = impliedProb(yesBid, yesAsk);
-        pricesFetched++;
-      }catch{
-        // ignore
+        okPrices++;
       }
+    }catch{}
 
-      const st = stationCache.get(seriesTicker);
-      const stationId = st?.stationId || "—";
-      const obsNowF = st?.obsNowF || "—";
-      const fcHigh = st?.fcHigh || "—";
-      const fcLow  = st?.fcLow  || "—";
+    // Station weather
+    let stName="—", obsNowF="—", fcHigh="—", fcLow="—";
+    try{
+      if(stationId){
+        const w = await fetchStationWeather(stationId);
+        stName = w.stationName;
+        obsNowF = w.obsNowF;
+        fcHigh = w.fcHigh;
+        fcLow = w.fcLow;
+        okWx++;
+      }
+    }catch{}
 
-      const tr = document.createElement("tr");
-      tr.style.cursor = "pointer";
-      tr.innerHTML = `
-        <td>
-          <div><strong>${esc(title)}</strong></div>
-          <div class="tiny"><a href="${esc(marketUrl)}" target="_blank" rel="noreferrer">Open</a> • <span class="tiny muted2">${esc(ticker)}</span></div>
-        </td>
-        <td>${esc(seriesTicker)}</td>
-        <td>${esc(closeTime)}</td>
-        <td>${yesBid == null ? "—" : pct(yesBid)}</td>
-        <td>${yesAsk == null ? "—" : pct(yesAsk)}</td>
-        <td>${imp == null ? "—" : pct(imp)}</td>
-        <td>${esc(stationId)}</td>
-        <td>${esc(obsNowF)}</td>
-        <td>${esc(fcHigh)}</td>
-        <td>${esc(fcLow)}</td>
-      `;
-
-      tr.addEventListener("click", () => {
-        save(KEY.selectedMarket, marketUrl);
-        loadMarketFrame(marketUrl);
-        $("rightStatus").textContent = ticker ? `Loaded ${ticker}` : "Loaded";
-      });
-
-      tbody.appendChild(tr);
-    }
-
-    // Load selected market frame
-    const sel = load(KEY.selectedMarket, marketsAll[0]?.m?.ticker ? `https://kalshi.com/markets/${String(marketsAll[0].m.ticker).toLowerCase()}` : "https://kalshi.com/");
-    loadMarketFrame(sel);
-
-    $("leftStatus").textContent = `Series: ${seriesList.length} • Markets: ${marketsAll.length} • Prices: ${pricesFetched}`;
-    setStatus("Done.");
-  }catch(e){
-    setStatus("Error: " + (e.message || e));
-    $("leftStatus").textContent = "Error";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>
+        <div><strong>${label}</strong></div>
+        <div class="tiny">
+          <a href="${kalshiUrl}" target="_blank" rel="noreferrer">Open market</a>
+          ${ticker ? ` • <span class="tiny muted2">${ticker}</span>` : ""}
+        </div>
+      </td>
+      <td>${yesBid==null?"—":pct(yesBid)}</td>
+      <td>${yesAsk==null?"—":pct(yesAsk)}</td>
+      <td>${imp==null?"—":pct(imp)}</td>
+      <td>
+        <div><strong>${stationId || "—"}</strong></div>
+        <div class="tiny muted2">${stName}</div>
+      </td>
+      <td>${obsNowF}</td>
+      <td>${fcHigh}</td>
+      <td>${fcLow}</td>
+    `;
+    rowsEl.appendChild(tr);
   }
+
+  $("counts").textContent = `Watching: ${watch.length} • Prices ok: ${okPrices}/${watch.length} • Weather ok: ${okWx}/${watch.length}`;
+  setStatus("Done.");
 }
 
-/* ---------------- UI wiring ---------------- */
+/* ------------ UI wiring ------------ */
 $("save").onclick = () => {
   save(KEY.proxy, $("proxy").value.trim());
-  save(KEY.refreshSec, $("refreshSec").value.trim());
   setStatus("Saved.");
-  startAutoRefresh();
 };
 
 $("refresh").onclick = refreshAll;
 
-$("saveConfig").onclick = async () => {
+$("saveWatch").onclick = async () => {
   try{
-    const parsed = JSON.parse($("configJson").value);
-    saveJSON(KEY.config, parsed);
-    setStatus("Config saved.");
+    const parsed = JSON.parse($("watchJson").value);
+    saveJSON(KEY.watch, parsed);
+    setStatus("Watchlist saved.");
     await refreshAll();
   }catch{
-    alert("Config JSON is not valid. Fix it and try again.");
+    alert("Watchlist JSON is not valid. Fix it and try again.");
   }
 };
 
 $("loadSample").onclick = () => {
-  $("configJson").value = JSON.stringify(SAMPLE_CONFIG, null, 2);
+  $("watchJson").value = JSON.stringify(SAMPLE_WATCH, null, 2);
 };
 
-function startAutoRefresh(){
-  if(refreshTimer) clearInterval(refreshTimer);
-  const sec = Math.max(10, Number($("refreshSec").value || 60));
-  refreshTimer = setInterval(refreshAll, sec * 1000);
-}
-
-/* ---------------- init ---------------- */
+/* ------------ init ------------ */
 (function init(){
   $("proxy").value = load(KEY.proxy, "");
-  $("refreshSec").value = load(KEY.refreshSec, "60");
-  if(!localStorage.getItem(KEY.config)) saveJSON(KEY.config, SAMPLE_CONFIG);
-  $("configJson").value = JSON.stringify(loadJSON(KEY.config, SAMPLE_CONFIG), null, 2);
+  if(!localStorage.getItem(KEY.watch)) saveJSON(KEY.watch, SAMPLE_WATCH);
+  $("watchJson").value = JSON.stringify(loadJSON(KEY.watch, SAMPLE_WATCH), null, 2);
   refreshAll();
-  startAutoRefresh();
 })();
 </script>
 </body>
