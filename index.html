@@ -1,29 +1,121 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<title>Logan Leverett</title>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logan Leverett</title>
+
 <style>
 body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: linear-gradient(135deg, #0f172a, #1e293b);
-  color: white;
-  text-align: center;
-  padding: 100px 20px;
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    color: white;
 }
-h1 {
-  font-size: 48px;
+
+header {
+    text-align: center;
+    padding: 100px 20px 60px 20px;
 }
-p {
-  font-size: 20px;
-  color: #cbd5e1;
+
+header h1 {
+    font-size: 50px;
+    margin-bottom: 10px;
+}
+
+header p {
+    font-size: 20px;
+    color: #cbd5e1;
+}
+
+.button {
+    display: inline-block;
+    margin: 15px;
+    padding: 14px 28px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.primary {
+    background-color: #2563eb;
+    color: white;
+}
+
+.secondary {
+    border: 2px solid white;
+    color: white;
+}
+
+section {
+    padding: 60px 20px;
+    max-width: 900px;
+    margin: auto;
+}
+
+section h2 {
+    font-size: 32px;
+    margin-bottom: 20px;
+}
+
+.card {
+    background: rgba(255,255,255,0.05);
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+footer {
+    text-align: center;
+    padding: 30px;
+    color: #94a3b8;
+    font-size: 14px;
 }
 </style>
 </head>
 
 <body>
-<h1>Logan Leverett</h1>
-<p>This is my upgraded website.</p>
+
+<header>
+    <h1>Logan Leverett</h1>
+    <p>Builder • Creator • Always Improving</p>
+    <a href="mailto:loganlev12345@gmail.com" class="button primary">Contact Me</a>
+    <a href="#about" class="button secondary">Learn More</a>
+</header>
+
+<section id="about">
+    <h2>About Me</h2>
+    <div class="card">
+        <p>
+        I am focused on growth — physically, financially, and professionally.
+        I believe in building real skills, taking ownership of my future, 
+        and constantly leveling up.
+        </p>
+    </div>
+</section>
+
+<section>
+    <h2>What I’m Working On</h2>
+    <div class="card">
+        <p>• Building new income streams</p>
+        <p>• Improving health and discipline</p>
+        <p>• Developing technical and operational skills</p>
+    </div>
+</section>
+
+<section>
+    <h2>Vision</h2>
+    <div class="card">
+        <p>
+        This website is my foundation. Over time it will grow into 
+        a hub for projects, ideas, and future ventures.
+        </p>
+    </div>
+</section>
+
+<footer>
+    © 2026 Logan Leverett | Hosted on GitHub Pages
+</footer>
+
 </body>
 </html>
