@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Kalshi × Weather Watchlist</title>
+  <title>Kalshi × Weather Hub</title>
   <style>
     :root{
       --bg1:#0f172a; --bg2:#1e293b;
@@ -18,6 +18,8 @@
     .sub{color:var(--muted2);margin:0 0 14px;line-height:1.5}
     .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width: 900px){ .grid{grid-template-columns: 1fr 1fr;} }
     input,button{font:inherit}
     input{
       padding:10px 12px;border-radius:12px;border:1px solid var(--border);
@@ -38,44 +40,70 @@
     td{font-size:14px}
     a{color:#c7d2fe}
     code{background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px}
+    .big{font-size:28px;font-weight:900;margin:6px 0}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Kalshi × Weather Watchlist</h1>
+  <h1>Kalshi × Weather Hub</h1>
   <p class="sub">
-    Paste a Kalshi market URL, enter the exact station Kalshi uses (ex: CLIMDW → <code>KMDW</code>, LAX → <code>KLAX</code>),
-    and it shows market prices + station weather.
+    City NWS tracker (forecast high/low) + your Kalshi watchlist (paste URL) + exact station weather for settlement.
   </p>
 
+  <!-- SETTINGS -->
   <div class="card">
     <div class="row">
       <div class="pill">Proxy (Cloudflare Worker URL):</div>
       <input id="proxy" placeholder="https://your-worker.workers.dev" style="min-width:360px;flex:1">
+      <div class="pill">Auto-refresh (sec):</div>
+      <input id="refreshSec" type="number" min="15" step="15" value="60" style="width:90px">
       <button id="saveProxy" class="primary">Save</button>
-      <button id="refresh">Refresh</button>
+      <button id="refreshAll">Refresh</button>
       <span id="status" class="tiny"></span>
+    </div>
+    <div class="tiny" style="margin-top:8px">
+      Proxy helps avoid CORS and also sets the proper NWS User-Agent (through your Worker).
     </div>
   </div>
 
+  <!-- NWS CITY TRACKER -->
   <div class="card">
-    <strong>Add market</strong>
+    <div class="row" style="justify-content:space-between">
+      <strong>NWS City Tracker (Forecast)</strong>
+      <span id="nwsStatus" class="tiny"></span>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <input id="addCity" placeholder='Add city or ZIP (ex: "10001" or "Miami, FL")' style="min-width:420px;flex:1">
+      <button id="addCityBtn" class="primary">Add</button>
+      <button id="resetCities">Reset</button>
+    </div>
+    <div class="tiny" style="margin-top:10px">
+      This uses NWS Points → Forecast for each city you add.
+    </div>
+    <div class="divider"></div>
+    <div id="cityCards" class="grid"></div>
+  </div>
+
+  <!-- KALSHI WATCHLIST -->
+  <div class="card">
+    <strong>Add market (paste URL)</strong>
     <div class="divider"></div>
     <div class="row">
       <input id="kalshiUrl" placeholder="Paste Kalshi market URL" style="min-width:460px;flex:1">
       <input id="stationId" placeholder="Station (ex: KMDW / KLAX)" style="width:210px;text-transform:uppercase">
       <input id="label" placeholder="Optional label" style="min-width:220px;flex:1">
-      <button id="add" class="primary">Add</button>
+      <button id="addMarket" class="primary">Add</button>
       <button id="clearAll">Clear all</button>
     </div>
     <div class="tiny" style="margin-top:10px">
-      The ticker is auto-detected from the end of the URL (ex: <code>.../kxhighlax-26feb18</code> → <code>KXHIGHLAX-26FEB18</code>)
+      Ticker auto-detected from the end of the URL (ex: <code>.../kxhighlax-26feb18</code> → <code>KXHIGHLAX-26FEB18</code>)
     </div>
   </div>
 
   <div class="card">
     <div class="row" style="justify-content:space-between">
-      <strong>Live view</strong>
+      <strong>Kalshi Watchlist + Station Weather</strong>
       <span id="counts" class="tiny"></span>
     </div>
     <div class="divider"></div>
@@ -103,7 +131,21 @@
 </div>
 
 <script>
-const KEY = { proxy: "wl_proxy_v2", watch: "wl_watch_v2" };
+/* ---------------- Storage ---------------- */
+const KEY = {
+  proxy: "hub_proxy_v4",
+  refreshSec: "hub_refreshSec_v4",
+  watch: "hub_watch_v4",
+  cities: "hub_cities_v4",
+};
+
+const DEFAULT_CITIES = [
+  { label: "New York City (10001)", query: "10001" },
+  { label: "Miami (33101)", query: "33101" },
+  { label: "Chicago (60601)", query: "60601" },
+  { label: "Los Angeles (90001)", query: "90001" }
+];
+
 const $ = (id) => document.getElementById(id);
 
 function load(key, fallback){
@@ -113,7 +155,7 @@ function save(key, value){ localStorage.setItem(key, value); }
 function loadJSON(key, fallback){
   try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch{ return fallback; }
 }
-function saveJSON(key, value){ localStorage.setItem(key, JSON.stringify(value)); } // hidden from user
+function saveJSON(key, value){ localStorage.setItem(key, JSON.stringify(value)); } // stored quietly
 
 function setStatus(msg){ $("status").textContent = msg; }
 
@@ -129,12 +171,12 @@ async function fetchJSON(url){
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
   return await res.json();
 }
-
 function pct(x){
   if(x == null || Number.isNaN(x)) return "—";
   return (x*100).toFixed(1) + "%";
 }
 
+/* ---------------- Helpers ---------------- */
 function extractTickerFromKalshiUrl(urlStr){
   try{
     const u = new URL(urlStr);
@@ -144,7 +186,6 @@ function extractTickerFromKalshiUrl(urlStr){
     return last.toUpperCase();
   }catch{ return null; }
 }
-
 function extractTopOfBook(orderbookJson){
   const ob = orderbookJson?.orderbook || orderbookJson;
   let yesBids = ob?.yes?.bids || ob?.yes_bids || ob?.yesBids || [];
@@ -164,6 +205,20 @@ function impliedProb(yesBid, yesAsk){
   return (yesBid != null ? yesBid : yesAsk);
 }
 
+/* ---------------- NWS City Forecast ----------------
+   Uses Nominatim geocode -> NWS points -> forecast periods -> pick first day (high) + first night (low)
+*/
+async function geocode(query){
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("format","json");
+  url.searchParams.set("limit","1");
+  url.searchParams.set("q", /^[0-9]{5}(-[0-9]{4})?$/.test(query) ? (query + " USA") : query);
+  const res = await fetch(url.toString(), { headers: { "Accept":"application/json" }});
+  if(!res.ok) throw new Error("Geocode failed");
+  const data = await res.json();
+  if(!data || !data[0]) throw new Error("No match");
+  return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), display: data[0].display_name };
+}
 function pickHighLow(periods){
   let high=null, low=null;
   for(const p of periods){
@@ -177,14 +232,63 @@ function pickHighLow(periods){
 function fmtForecastTemp(p){
   if(!p || p.temperature == null) return "—";
   if((p.temperatureUnit||"").toUpperCase() === "F") return Math.round(Number(p.temperature)) + "°F";
-  return "—";
+  return `${p.temperature}°${p.temperatureUnit||""}`;
 }
+async function fetchCityForecast(query){
+  const g = await geocode(query);
+  const pts = await fetchJSON(proxyWrap(`https://api.weather.gov/points/${g.lat},${g.lon}`));
+  const props = pts?.properties;
+  const forecastUrl = props?.forecast;
+  if(!forecastUrl) throw new Error("No forecast url");
+  const fc = await fetchJSON(proxyWrap(forecastUrl));
+  const periods = fc?.properties?.periods || [];
+  if(!periods.length) throw new Error("No periods");
+  const hl = pickHighLow(periods);
+  const rel = props?.relativeLocation?.properties;
+  const cityName = rel?.city && rel?.state ? `${rel.city}, ${rel.state}` : (g.display || query);
+  return {
+    name: cityName,
+    updated: fc?.properties?.updated || "",
+    now: periods[0],
+    high: hl.high,
+    low: hl.low
+  };
+}
+function cityCardHTML(city, data, idx){
+  const upd = data.updated ? new Date(data.updated).toLocaleString() : "—";
+  const nowTemp = data.now?.temperature != null ? `${data.now.temperature}°${data.now.temperatureUnit||"F"}` : "—";
+  const nowShort = data.now?.shortForecast || "";
+  return `
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div class="tiny">${city.label || city.query}</div>
+          <strong>${data.name}</strong>
+          <div class="tiny">Updated: ${upd}</div>
+        </div>
+        <button data-delcity="${idx}">Remove</button>
+      </div>
+      <div class="divider"></div>
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div style="min-width:220px">
+          <div class="big">${nowTemp}</div>
+          <div class="tiny">${nowShort}</div>
+        </div>
+        <div class="row" style="gap:10px;justify-content:flex-end">
+          <span class="pill">High: <b>${fmtForecastTemp(data.high)}</b></span>
+          <span class="pill">Low: <b>${fmtForecastTemp(data.low)}</b></span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------------- Station weather for settlement ---------------- */
 function fmtTempF(tempC){
   if(tempC == null) return "—";
   const f = (tempC * 9/5) + 32;
   return Math.round(f) + "°F";
 }
-
 async function fetchStationWeather(stationId){
   const st = await fetchJSON(proxyWrap(`https://api.weather.gov/stations/${stationId}`));
   const coords = st?.geometry?.coordinates;
@@ -215,11 +319,47 @@ async function fetchStationWeather(stationId){
   };
 }
 
-async function refreshAll(){
-  setStatus("Refreshing…");
+/* ---------------- Refresh routines ---------------- */
+async function refreshCities(){
+  const cities = loadJSON(KEY.cities, DEFAULT_CITIES);
+  const wrap = $("cityCards");
+  wrap.innerHTML = "";
+  let ok = 0;
+
+  for(let i=0;i<cities.length;i++){
+    const c = cities[i];
+    try{
+      const data = await fetchCityForecast(c.query || c.label);
+      wrap.insertAdjacentHTML("beforeend", cityCardHTML(c, data, i));
+      ok++;
+    }catch(e){
+      wrap.insertAdjacentHTML("beforeend", `
+        <div class="card">
+          <strong>${c.label || c.query}</strong>
+          <div class="divider"></div>
+          <div class="tiny">Failed: ${e.message || e}</div>
+        </div>
+      `);
+    }
+  }
+
+  // wire remove buttons
+  wrap.querySelectorAll("button[data-delcity]").forEach(btn => {
+    btn.onclick = async () => {
+      const idx = Number(btn.getAttribute("data-delcity"));
+      const arr = loadJSON(KEY.cities, DEFAULT_CITIES);
+      arr.splice(idx,1);
+      saveJSON(KEY.cities, arr.length ? arr : DEFAULT_CITIES);
+      await refreshCities();
+    };
+  });
+
+  $("nwsStatus").textContent = `Loaded ${ok}/${cities.length}`;
+}
+
+async function refreshWatchlist(){
   const rowsEl = $("rows");
   rowsEl.innerHTML = "";
-
   const watch = loadJSON(KEY.watch, []);
   let okPrices = 0, okWx = 0;
 
@@ -276,19 +416,52 @@ async function refreshAll(){
       const w = loadJSON(KEY.watch, []);
       w.splice(idx,1);
       saveJSON(KEY.watch, w);
-      await refreshAll();
+      await refreshWatchlist();
     };
   });
 
-  $("counts").textContent = `Watching: ${watch.length} • Prices ok: ${okPrices}/${watch.length} • Weather ok: ${okWx}/${watch.length}`;
-  setStatus("Done.");
+  $("counts").textContent = `Watching: ${watch.length} • Prices ok: ${okPrices}/${watch.length} • Station wx ok: ${okWx}/${watch.length}`;
 }
 
-/* UI */
-$("saveProxy").onclick = () => { save(KEY.proxy, $("proxy").value.trim()); setStatus("Saved."); };
-$("refresh").onclick = refreshAll;
+let timer = null;
+async function refreshAll(){
+  setStatus("Refreshing…");
+  await refreshCities();
+  await refreshWatchlist();
+  setStatus("Done.");
+}
+function startTimer(){
+  if(timer) clearInterval(timer);
+  const sec = Math.max(15, Number($("refreshSec").value || 60));
+  timer = setInterval(refreshAll, sec * 1000);
+}
 
-$("add").onclick = async () => {
+/* ---------------- UI ---------------- */
+$("saveProxy").onclick = () => {
+  save(KEY.proxy, $("proxy").value.trim());
+  save(KEY.refreshSec, $("refreshSec").value.trim());
+  setStatus("Saved.");
+  startTimer();
+};
+
+$("refreshAll").onclick = refreshAll;
+
+$("addCityBtn").onclick = async () => {
+  const q = $("addCity").value.trim();
+  if(!q) return;
+  $("addCity").value = "";
+  const arr = loadJSON(KEY.cities, DEFAULT_CITIES);
+  arr.unshift({ label: q, query: q });
+  saveJSON(KEY.cities, arr);
+  await refreshCities();
+};
+
+$("resetCities").onclick = async () => {
+  saveJSON(KEY.cities, DEFAULT_CITIES);
+  await refreshCities();
+};
+
+$("addMarket").onclick = async () => {
   const kalshiUrl = $("kalshiUrl").value.trim();
   const stationId = $("stationId").value.trim().toUpperCase();
   const label = $("label").value.trim();
@@ -300,11 +473,9 @@ $("add").onclick = async () => {
   if(!ticker) return alert("Could not read ticker from that URL.");
 
   const watch = loadJSON(KEY.watch, []);
-  // prevent duplicates by ticker
   if(watch.some(x => String(x.ticker||"").toUpperCase() === ticker)){
     return alert("That ticker is already in your watchlist.");
   }
-
   watch.unshift({ ticker, kalshiUrl, stationId, label });
   saveJSON(KEY.watch, watch);
 
@@ -312,19 +483,23 @@ $("add").onclick = async () => {
   $("stationId").value = "";
   $("label").value = "";
 
-  await refreshAll();
+  await refreshWatchlist();
 };
 
 $("clearAll").onclick = async () => {
   if(confirm("Clear the entire watchlist?")){
     saveJSON(KEY.watch, []);
-    await refreshAll();
+    await refreshWatchlist();
   }
 };
 
+/* ---------------- init ---------------- */
 (function init(){
   $("proxy").value = load(KEY.proxy, "");
+  $("refreshSec").value = load(KEY.refreshSec, "60");
+  if(!localStorage.getItem(KEY.cities)) saveJSON(KEY.cities, DEFAULT_CITIES);
   refreshAll();
+  startTimer();
 })();
 </script>
 </body>
