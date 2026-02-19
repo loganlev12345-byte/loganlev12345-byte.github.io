@@ -10,21 +10,22 @@
       --card:rgba(255,255,255,.06);
       --border:rgba(255,255,255,.12);
       --muted:#cbd5e1; --muted2:#94a3b8;
-      --accent:#2563eb;
+      --accent:#2563eb; --good:#22c55e; --bad:#ef4444; --warn:#f59e0b;
     }
     body{margin:0;font-family:Arial,Helvetica,sans-serif;background:linear-gradient(135deg,var(--bg1),var(--bg2));color:#fff}
-    .wrap{max-width:1200px;margin:0 auto;padding:26px 14px 70px}
+    .wrap{max-width:1250px;margin:0 auto;padding:26px 14px 70px}
     h1{margin:0 0 6px;font-size:32px}
     .sub{color:var(--muted2);margin:0 0 14px;line-height:1.5}
     .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
     .grid{display:grid;grid-template-columns:1fr;gap:12px}
     @media(min-width: 900px){ .grid{grid-template-columns: 1fr 1fr;} }
-    input,button{font:inherit}
-    input{
+    input,select,button{font:inherit}
+    input,select{
       padding:10px 12px;border-radius:12px;border:1px solid var(--border);
       background:rgba(0,0,0,.18);color:#fff;outline:none
     }
+    select{cursor:pointer}
     button{
       padding:10px 12px;border-radius:12px;border:1px solid var(--border);
       background:rgba(0,0,0,.12);color:#fff;cursor:pointer;font-weight:700
@@ -41,28 +42,33 @@
     a{color:#c7d2fe}
     code{background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px}
     .big{font-size:28px;font-weight:900;margin:6px 0}
+    .badge{display:inline-block;font-size:12px;padding:3px 8px;border-radius:999px;font-weight:900}
+    .b-good{background:rgba(34,197,94,.18);border:1px solid rgba(34,197,94,.45);color:#bbf7d0}
+    .b-bad{background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.45);color:#fecaca}
+    .b-warn{background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.45);color:#fde68a}
   </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Kalshi × Weather Hub</h1>
   <p class="sub">
-    City NWS tracker (forecast high/low) + your Kalshi watchlist (paste URL) + exact station weather for settlement.
+    Add cities (NWS forecast) + paste Kalshi URLs (station weather) + evaluate your prediction vs market.
   </p>
 
   <!-- SETTINGS -->
   <div class="card">
     <div class="row">
-      <div class="pill">Proxy (Cloudflare Worker URL):</div>
+      <div class="pill">Proxy:</div>
       <input id="proxy" placeholder="https://your-worker.workers.dev" style="min-width:360px;flex:1">
+      <div class="pill">σ (°F):</div>
+      <input id="sigma" type="number" step="0.1" value="2.5" style="width:90px">
+      <div class="pill">Edge threshold (%):</div>
+      <input id="edgeTh" type="number" step="0.1" value="5" style="width:90px">
       <div class="pill">Auto-refresh (sec):</div>
       <input id="refreshSec" type="number" min="15" step="15" value="60" style="width:90px">
-      <button id="saveProxy" class="primary">Save</button>
+      <button id="save" class="primary">Save</button>
       <button id="refreshAll">Refresh</button>
       <span id="status" class="tiny"></span>
-    </div>
-    <div class="tiny" style="margin-top:8px">
-      Proxy helps avoid CORS and also sets the proper NWS User-Agent (through your Worker).
     </div>
   </div>
 
@@ -78,32 +84,30 @@
       <button id="addCityBtn" class="primary">Add</button>
       <button id="resetCities">Reset</button>
     </div>
-    <div class="tiny" style="margin-top:10px">
-      This uses NWS Points → Forecast for each city you add.
-    </div>
     <div class="divider"></div>
     <div id="cityCards" class="grid"></div>
   </div>
 
-  <!-- KALSHI WATCHLIST -->
+  <!-- WATCHLIST ADD -->
   <div class="card">
-    <strong>Add market (paste URL)</strong>
+    <strong>Add market</strong>
     <div class="divider"></div>
     <div class="row">
       <input id="kalshiUrl" placeholder="Paste Kalshi market URL" style="min-width:460px;flex:1">
-      <input id="stationId" placeholder="Station (ex: KMDW / KLAX)" style="width:210px;text-transform:uppercase">
+      <input id="stationId" placeholder="Exact station (ex: KMDW / KLAX)" style="width:210px;text-transform:uppercase">
       <input id="label" placeholder="Optional label" style="min-width:220px;flex:1">
       <button id="addMarket" class="primary">Add</button>
       <button id="clearAll">Clear all</button>
     </div>
     <div class="tiny" style="margin-top:10px">
-      Ticker auto-detected from the end of the URL (ex: <code>.../kxhighlax-26feb18</code> → <code>KXHIGHLAX-26FEB18</code>)
+      Ticker auto-detected from URL end. For “Good/Bad”, fill in your predicted temp + market line.
     </div>
   </div>
 
+  <!-- WATCHLIST TABLE -->
   <div class="card">
     <div class="row" style="justify-content:space-between">
-      <strong>Kalshi Watchlist + Station Weather</strong>
+      <strong>Watchlist + Evaluator</strong>
       <span id="counts" class="tiny"></span>
     </div>
     <div class="divider"></div>
@@ -113,14 +117,19 @@
         <thead>
           <tr>
             <th>Market</th>
-            <th>Ticker</th>
             <th>YES Bid</th>
             <th>YES Ask</th>
             <th>Implied P</th>
+            <th>Your Pred (°F)</th>
+            <th>Line</th>
+            <th>Dir</th>
+            <th>Model P</th>
+            <th>Edge</th>
+            <th>Verdict</th>
             <th>Station</th>
             <th>Obs Now</th>
-            <th>Forecast High</th>
-            <th>Forecast Low</th>
+            <th>Fcst High</th>
+            <th>Fcst Low</th>
             <th></th>
           </tr>
         </thead>
@@ -133,10 +142,12 @@
 <script>
 /* ---------------- Storage ---------------- */
 const KEY = {
-  proxy: "hub_proxy_v4",
-  refreshSec: "hub_refreshSec_v4",
-  watch: "hub_watch_v4",
-  cities: "hub_cities_v4",
+  proxy: "hub_proxy_v5",
+  sigma: "hub_sigma_v5",
+  edgeTh: "hub_edgeTh_v5",
+  refreshSec: "hub_refreshSec_v5",
+  watch: "hub_watch_v5",
+  cities: "hub_cities_v5",
 };
 
 const DEFAULT_CITIES = [
@@ -155,7 +166,7 @@ function save(key, value){ localStorage.setItem(key, value); }
 function loadJSON(key, fallback){
   try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch{ return fallback; }
 }
-function saveJSON(key, value){ localStorage.setItem(key, JSON.stringify(value)); } // stored quietly
+function saveJSON(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
 
 function setStatus(msg){ $("status").textContent = msg; }
 
@@ -176,7 +187,24 @@ function pct(x){
   return (x*100).toFixed(1) + "%";
 }
 
-/* ---------------- Helpers ---------------- */
+/* ---------------- Normal CDF approx ---------------- */
+function normCdf(z){
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989423 * Math.exp(-z*z/2);
+  let p = d*t*(0.3193815 + t*(-0.3565638 + t*(1.781478 + t*(-1.821256 + t*1.330274))));
+  if (z > 0) p = 1 - p;
+  return p;
+}
+function modelProb(predF, strikeF, sigmaF, dir){
+  if(predF == null || strikeF == null || !sigmaF || !dir) return null;
+  const z = (strikeF - predF) / sigmaF;
+  const cdf = normCdf(z);
+  if(dir === "GE") return 1 - cdf;
+  if(dir === "LE") return cdf;
+  return null;
+}
+
+/* ---------------- Kalshi helpers ---------------- */
 function extractTickerFromKalshiUrl(urlStr){
   try{
     const u = new URL(urlStr);
@@ -205,9 +233,7 @@ function impliedProb(yesBid, yesAsk){
   return (yesBid != null ? yesBid : yesAsk);
 }
 
-/* ---------------- NWS City Forecast ----------------
-   Uses Nominatim geocode -> NWS points -> forecast periods -> pick first day (high) + first night (low)
-*/
+/* ---------------- NWS city forecast ---------------- */
 async function geocode(query){
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("format","json");
@@ -246,16 +272,9 @@ async function fetchCityForecast(query){
   const hl = pickHighLow(periods);
   const rel = props?.relativeLocation?.properties;
   const cityName = rel?.city && rel?.state ? `${rel.city}, ${rel.state}` : (g.display || query);
-  return {
-    name: cityName,
-    updated: fc?.properties?.updated || "",
-    now: periods[0],
-    high: hl.high,
-    low: hl.low
-  };
+  return { name: cityName, now: periods[0], high: hl.high, low: hl.low };
 }
 function cityCardHTML(city, data, idx){
-  const upd = data.updated ? new Date(data.updated).toLocaleString() : "—";
   const nowTemp = data.now?.temperature != null ? `${data.now.temperature}°${data.now.temperatureUnit||"F"}` : "—";
   const nowShort = data.now?.shortForecast || "";
   return `
@@ -264,7 +283,6 @@ function cityCardHTML(city, data, idx){
         <div>
           <div class="tiny">${city.label || city.query}</div>
           <strong>${data.name}</strong>
-          <div class="tiny">Updated: ${upd}</div>
         </div>
         <button data-delcity="${idx}">Remove</button>
       </div>
@@ -283,7 +301,7 @@ function cityCardHTML(city, data, idx){
   `;
 }
 
-/* ---------------- Station weather for settlement ---------------- */
+/* ---------------- Station weather ---------------- */
 function fmtTempF(tempC){
   if(tempC == null) return "—";
   const f = (tempC * 9/5) + 32;
@@ -311,12 +329,7 @@ async function fetchStationWeather(stationId){
     obsNowF = fmtTempF(c);
   }catch{}
 
-  return {
-    stationName: st?.properties?.name || stationId,
-    obsNowF,
-    fcHigh: fmtForecastTemp(hl.high),
-    fcLow: fmtForecastTemp(hl.low),
-  };
+  return { obsNowF, fcHigh: fmtForecastTemp(hl.high), fcLow: fmtForecastTemp(hl.low), stationName: st?.properties?.name || stationId };
 }
 
 /* ---------------- Refresh routines ---------------- */
@@ -333,17 +346,10 @@ async function refreshCities(){
       wrap.insertAdjacentHTML("beforeend", cityCardHTML(c, data, i));
       ok++;
     }catch(e){
-      wrap.insertAdjacentHTML("beforeend", `
-        <div class="card">
-          <strong>${c.label || c.query}</strong>
-          <div class="divider"></div>
-          <div class="tiny">Failed: ${e.message || e}</div>
-        </div>
-      `);
+      wrap.insertAdjacentHTML("beforeend", `<div class="card"><strong>${c.label||c.query}</strong><div class="divider"></div><div class="tiny">Failed: ${e.message||e}</div></div>`);
     }
   }
 
-  // wire remove buttons
   wrap.querySelectorAll("button[data-delcity]").forEach(btn => {
     btn.onclick = async () => {
       const idx = Number(btn.getAttribute("data-delcity"));
@@ -357,7 +363,17 @@ async function refreshCities(){
   $("nwsStatus").textContent = `Loaded ${ok}/${cities.length}`;
 }
 
+function verdictBadge(edgePctVal, th){
+  if(edgePctVal == null) return `<span class="badge b-warn">Need inputs</span>`;
+  if(edgePctVal >= th) return `<span class="badge b-good">GOOD</span>`;
+  if(edgePctVal <= -th) return `<span class="badge b-bad">BAD</span>`;
+  return `<span class="badge b-warn">OK</span>`;
+}
+
 async function refreshWatchlist(){
+  const sigma = Number($("sigma").value || 2.5);
+  const th = Number($("edgeTh").value || 5);
+
   const rowsEl = $("rows");
   rowsEl.innerHTML = "";
   const watch = loadJSON(KEY.watch, []);
@@ -370,14 +386,19 @@ async function refreshWatchlist(){
     const kalshiUrl = item.kalshiUrl || "https://kalshi.com/";
     const stationId = String(item.stationId || "").toUpperCase();
 
-    let yesBid=null, yesAsk=null, imp=null;
+    // stored user inputs
+    const predF = (item.predF != null && item.predF !== "") ? Number(item.predF) : null;
+    const strikeF = (item.strikeF != null && item.strikeF !== "") ? Number(item.strikeF) : null;
+    const dir = item.dir || "";
+
+    let yesBid=null, yesAsk=null, marketP=null;
     try{
       if(ticker){
         const obUrl = `https://api.elections.kalshi.com/trade-api/v2/markets/${ticker}/orderbook`;
         const ob = await fetchJSON(proxyWrap(obUrl));
         const tob = extractTopOfBook(ob);
         yesBid = tob.yesBid; yesAsk = tob.yesAsk;
-        imp = impliedProb(yesBid, yesAsk);
+        marketP = impliedProb(yesBid, yesAsk);
         okPrices++;
       }
     }catch{}
@@ -394,27 +415,75 @@ async function refreshWatchlist(){
       }
     }catch{}
 
+    const modelP = modelProb(predF, strikeF, sigma, dir);
+    const edge = (modelP != null && marketP != null) ? (modelP - marketP) * 100 : null;
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><strong>${label}</strong><div class="tiny"><a href="${kalshiUrl}" target="_blank" rel="noreferrer">Open</a></div></td>
-      <td>${ticker || "—"}</td>
+      <td><strong>${label}</strong><div class="tiny"><a href="${kalshiUrl}" target="_blank" rel="noreferrer">Open</a> • ${ticker}</div></td>
       <td>${yesBid==null?"—":pct(yesBid)}</td>
       <td>${yesAsk==null?"—":pct(yesAsk)}</td>
-      <td>${imp==null?"—":pct(imp)}</td>
+      <td>${marketP==null?"—":pct(marketP)}</td>
+
+      <td><input data-pred="${i}" value="${predF ?? ""}" placeholder="ex: 62" style="width:90px"></td>
+      <td><input data-strike="${i}" value="${strikeF ?? ""}" placeholder="ex: 60" style="width:90px"></td>
+      <td>
+        <select data-dir="${i}">
+          <option value="" ${dir===""?"selected":""}>—</option>
+          <option value="GE" ${dir==="GE"?"selected":""}>&ge;</option>
+          <option value="LE" ${dir==="LE"?"selected":""}>&le;</option>
+        </select>
+      </td>
+
+      <td>${modelP==null?"—":pct(modelP)}</td>
+      <td>${edge==null?"—":edge.toFixed(1)+"%"}</td>
+      <td>${verdictBadge(edge, th)}</td>
+
       <td><strong>${stationId || "—"}</strong><div class="tiny">${stName}</div></td>
       <td>${obsNowF}</td>
       <td>${fcHigh}</td>
       <td>${fcLow}</td>
+
       <td><button data-del="${i}">Delete</button></td>
     `;
     rowsEl.appendChild(tr);
   }
 
+  // wire delete
   rowsEl.querySelectorAll("button[data-del]").forEach(btn => {
     btn.onclick = async () => {
       const idx = Number(btn.getAttribute("data-del"));
       const w = loadJSON(KEY.watch, []);
       w.splice(idx,1);
+      saveJSON(KEY.watch, w);
+      await refreshWatchlist();
+    };
+  });
+
+  // wire inputs (save as you type)
+  rowsEl.querySelectorAll("input[data-pred]").forEach(inp => {
+    inp.onchange = async () => {
+      const idx = Number(inp.getAttribute("data-pred"));
+      const w = loadJSON(KEY.watch, []);
+      w[idx].predF = inp.value;
+      saveJSON(KEY.watch, w);
+      await refreshWatchlist();
+    };
+  });
+  rowsEl.querySelectorAll("input[data-strike]").forEach(inp => {
+    inp.onchange = async () => {
+      const idx = Number(inp.getAttribute("data-strike"));
+      const w = loadJSON(KEY.watch, []);
+      w[idx].strikeF = inp.value;
+      saveJSON(KEY.watch, w);
+      await refreshWatchlist();
+    };
+  });
+  rowsEl.querySelectorAll("select[data-dir]").forEach(sel => {
+    sel.onchange = async () => {
+      const idx = Number(sel.getAttribute("data-dir"));
+      const w = loadJSON(KEY.watch, []);
+      w[idx].dir = sel.value;
       saveJSON(KEY.watch, w);
       await refreshWatchlist();
     };
@@ -437,8 +506,10 @@ function startTimer(){
 }
 
 /* ---------------- UI ---------------- */
-$("saveProxy").onclick = () => {
+$("save").onclick = () => {
   save(KEY.proxy, $("proxy").value.trim());
+  save(KEY.sigma, $("sigma").value.trim());
+  save(KEY.edgeTh, $("edgeTh").value.trim());
   save(KEY.refreshSec, $("refreshSec").value.trim());
   setStatus("Saved.");
   startTimer();
@@ -476,7 +547,7 @@ $("addMarket").onclick = async () => {
   if(watch.some(x => String(x.ticker||"").toUpperCase() === ticker)){
     return alert("That ticker is already in your watchlist.");
   }
-  watch.unshift({ ticker, kalshiUrl, stationId, label });
+  watch.unshift({ ticker, kalshiUrl, stationId, label, predF:"", strikeF:"", dir:"" });
   saveJSON(KEY.watch, watch);
 
   $("kalshiUrl").value = "";
@@ -496,6 +567,8 @@ $("clearAll").onclick = async () => {
 /* ---------------- init ---------------- */
 (function init(){
   $("proxy").value = load(KEY.proxy, "");
+  $("sigma").value = load(KEY.sigma, "2.5");
+  $("edgeTh").value = load(KEY.edgeTh, "5");
   $("refreshSec").value = load(KEY.refreshSec, "60");
   if(!localStorage.getItem(KEY.cities)) saveJSON(KEY.cities, DEFAULT_CITIES);
   refreshAll();
