@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Logan’s Weather x Kalshi Hub</title>
+  <title>Weather × Kalshi Hub</title>
   <style>
     :root{
       --bg1:#0f172a; --bg2:#1e293b;
@@ -21,12 +21,12 @@
     .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
     .right{margin-left:auto}
-    input,button,select,textarea{font:inherit}
+    input,button,textarea{font:inherit}
     input,textarea{
       padding:10px 12px;border-radius:12px;border:1px solid var(--border);
       background:rgba(0,0,0,.18);color:#fff;outline:none
     }
-    textarea{width:100%;min-height:120px;resize:vertical}
+    textarea{width:100%;min-height:150px;resize:vertical}
     button{
       padding:10px 12px;border-radius:12px;border:1px solid var(--border);
       background:rgba(0,0,0,.12);color:#fff;cursor:pointer;font-weight:700
@@ -54,15 +54,13 @@
 <body>
   <div class="wrap">
     <h1>Weather × Kalshi Hub</h1>
-    <p class="sub">
-      Left: live NWS highs/lows. Right: Kalshi market page + market prices (via proxy) + edge signals.
-    </p>
+    <p class="sub">Left: live NWS highs/lows. Right: Kalshi market page + market prices (via proxy) + edge signals.</p>
 
     <div class="card">
       <div class="row">
         <div class="pill">σ (temp uncertainty):</div>
         <input id="sigma" type="number" step="0.1" value="2.5" style="width:90px">
-        <div class="pill">Min edge:</div>
+        <div class="pill">Min edge (%):</div>
         <input id="minEdge" type="number" step="0.1" value="5" style="width:80px">
         <div class="pill">Proxy (Cloudflare Worker URL):</div>
         <input id="proxy" placeholder="https://your-worker.workers.dev" style="min-width:360px;flex:1">
@@ -70,7 +68,7 @@
         <button id="refresh">Refresh</button>
       </div>
       <div class="tiny" style="margin-top:8px">
-        Proxy is required to fetch Kalshi market data in the browser. NWS can load directly, but proxy is fine for both.
+        Proxy is required to fetch Kalshi market data in the browser. NWS can load directly, but proxy works for both.
       </div>
     </div>
 
@@ -84,7 +82,7 @@
         <div class="divider"></div>
 
         <div class="row" style="margin-bottom:10px">
-          <input id="addLoc" placeholder='Add location: "10001" or "Miami, FL"' />
+          <input id="addLoc" placeholder='Add location: "10001" or "Chicago, IL" or ZIP' />
           <button id="addLocBtn" class="primary">Add</button>
           <button id="resetLocs">Reset</button>
         </div>
@@ -101,8 +99,8 @@
         <div class="divider"></div>
 
         <div class="tiny muted" style="margin-bottom:8px">
-          Add markets below. Each entry needs: <code>label</code>, <code>kalshiUrl</code>, and optionally <code>orderbookUrl</code>.
-          If iframe is blocked, you’ll still have a one-click link.
+          Each entry needs: <code>label</code>, <code>kalshiUrl</code>, optional <code>orderbookUrl</code>.
+          For signals add: <code>cityQuery</code>, <code>metric</code> ("high" or "low"), <code>strikeF</code>, <code>direction</code> ("GE" or "LE").
         </div>
 
         <textarea id="marketsJson"></textarea>
@@ -112,14 +110,12 @@
         </div>
 
         <div class="divider"></div>
-
         <div id="signals"></div>
 
         <div class="divider"></div>
-
         <strong>Market View</strong>
         <div class="tiny muted2" style="margin:6px 0 10px">
-          Pick a market from the signals table (it will load here).
+          Click a row above. If embedding is blocked, use the link below the frame.
         </div>
         <div id="marketFrameWrap"></div>
       </div>
@@ -127,21 +123,16 @@
   </div>
 
 <script>
-/** ---------------------------
- * Storage keys
- * -------------------------- */
+/* ---------------- Storage ---------------- */
 const KEY = {
-  sigma: "hub_sigma_v1",
-  minEdge: "hub_minEdge_v1",
-  proxy: "hub_proxy_v1",
-  locs: "hub_locs_v1",
-  markets: "hub_markets_v1",
-  selectedMarket: "hub_selectedMarket_v1",
+  sigma: "hub_sigma_v2",
+  minEdge: "hub_minEdge_v2",
+  proxy: "hub_proxy_v2",
+  locs: "hub_locs_v2",
+  markets: "hub_markets_v2",
+  selectedMarket: "hub_selectedMarket_v2",
 };
 
-/** ---------------------------
- * Defaults
- * -------------------------- */
 const DEFAULT_LOCS = [
   { label: "New York City, NY", query: "10001" },
   { label: "Miami, FL", query: "33101" },
@@ -149,34 +140,30 @@ const DEFAULT_LOCS = [
 
 const SAMPLE_MARKETS = [
   {
-    label: "Example: NYC High Temp (replace me)",
-    kalshiUrl: "https://kalshi.com/",
-    // Put the *public* Kalshi orderbook endpoint URL here if you have it.
-    // You can also leave it blank and just use the embedded page + manual eyeballing.
-    orderbookUrl: ""
+    "label": "Chicago Low Temp (Feb 18, 2026)",
+    "kalshiUrl": "https://kalshi.com/markets/kxlowtchi/lowest-temperature-chicago/kxlowtchi-26feb18",
+    "orderbookUrl": "https://api.elections.kalshi.com/trade-api/v2/markets/KXLOWTCHI-26FEB18/orderbook",
+    "cityQuery": "60601",
+    "metric": "low",
+    "strikeF": 30,
+    "direction": "LE"
   }
 ];
 
-/** ---------------------------
- * Helpers
- * -------------------------- */
 const $ = (id) => document.getElementById(id);
 
 function load(key, fallback){
   try{ const v = localStorage.getItem(key); return v == null ? fallback : v; }catch{ return fallback; }
 }
-function save(key, value){
-  localStorage.setItem(key, value);
-}
+function save(key, value){ localStorage.setItem(key, value); }
 function loadJSON(key, fallback){
   try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch{ return fallback; }
 }
-function saveJSON(key, value){
-  localStorage.setItem(key, JSON.stringify(value, null, 2));
-}
+function saveJSON(key, value){ localStorage.setItem(key, JSON.stringify(value, null, 2)); }
 function esc(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function isZip(q){ return /^[0-9]{5}(-[0-9]{4})?$/.test(q); }
 
+/* ---------------- Proxy wrap ---------------- */
 function proxyWrap(url){
   const p = $("proxy").value.trim();
   if (!p) return url;
@@ -191,9 +178,8 @@ async function fetchJSON(url){
   return await res.json();
 }
 
-// Normal CDF approximation (good enough for signals)
+/* ---------------- Normal CDF (approx) ---------------- */
 function normCdf(z){
-  // Abramowitz-Stegun approximation
   const t = 1 / (1 + 0.2316419 * Math.abs(z));
   const d = 0.3989423 * Math.exp(-z*z/2);
   let p = d*t*(0.3193815 + t*(-0.3565638 + t*(1.781478 + t*(-1.821256 + t*1.330274))));
@@ -201,12 +187,11 @@ function normCdf(z){
   return p;
 }
 
-/** ---------------------------
- * Weather (NWS)
- * - geocode via Nominatim (no key)
- * - NWS points -> forecast
- * - derive today high/tonight low
- * -------------------------- */
+/* ---------------- Weather (NWS) ----------------
+   - Geocode: Nominatim
+   - NWS points -> forecast
+   - Extract first daytime as "high" and first night as "low"
+------------------------------------------------- */
 async function geocode(query){
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("format","json");
@@ -235,9 +220,11 @@ async function getNwsForLocation(loc){
   const points = await fetchJSON(proxyWrap(`https://api.weather.gov/points/${geo.lat},${geo.lon}`));
   const props = points?.properties;
   if(!props?.forecast) throw new Error("NWS points failed");
+
   const forecast = await fetchJSON(proxyWrap(props.forecast));
   const periods = forecast?.properties?.periods;
   if(!Array.isArray(periods) || !periods.length) throw new Error("No forecast");
+
   const { high, low } = pickHighLow(periods);
 
   const rel = props.relativeLocation?.properties;
@@ -249,7 +236,6 @@ async function getNwsForLocation(loc){
     current: periods[0],
     high,
     low,
-    periods
   };
 }
 
@@ -258,7 +244,7 @@ function fmtTemp(p){
   return `${p.temperature}°${p.temperatureUnit || "F"}`;
 }
 
-function renderWeatherCard(loc, data){
+function renderWeatherCard(loc, data, onRemove){
   const div = document.createElement("div");
   div.className = "card";
   const upd = data.updated ? new Date(data.updated).toLocaleString() : "—";
@@ -283,52 +269,30 @@ function renderWeatherCard(loc, data){
       </div>
     </div>
   `;
-  div.querySelector('button[data-remove="1"]').onclick = async () => {
-    const locs = loadJSON(KEY.locs, DEFAULT_LOCS);
-    const idx = locs.findIndex(x => x.query === loc.query && x.label === loc.label);
-    if(idx >= 0) locs.splice(idx,1);
-    saveJSON(KEY.locs, locs.length ? locs : DEFAULT_LOCS);
-    await refreshAll();
-  };
+  div.querySelector('button[data-remove="1"]').onclick = onRemove;
   return div;
 }
 
-/** ---------------------------
- * Kalshi markets + signals
- * - We compute implied prob from top-of-book mid (best bid/ask on YES if available)
- * - We compute model prob from NWS high and sigma:
- *     P(T >= strike) or P(T <= strike) depending on how you configure it
- *
- * Because Kalshi weather tickers differ, you’ll define strikes explicitly per market.
- * -------------------------- */
-
-// Market config supports optional strike + direction.
-// If you don’t set these, we’ll still show the market page and any fetched prices.
+/* ---------------- Kalshi market parsing ---------------- */
 function normalizeMarkets(raw){
   if(!Array.isArray(raw)) return [];
   return raw.map(m => ({
     label: m.label || "Market",
     kalshiUrl: m.kalshiUrl || "https://kalshi.com/",
     orderbookUrl: m.orderbookUrl || "",
-    // optional modeling fields:
-    cityQuery: m.cityQuery || "",         // e.g. "10001" to link weather
-    strikeF: (m.strikeF != null ? Number(m.strikeF) : null), // e.g. 75
-    direction: (m.direction === "LE" ? "LE" : (m.direction === "GE" ? "GE" : "")), // "GE" = temp >= strike, "LE" = temp <= strike
+    cityQuery: m.cityQuery || "",
+    metric: (m.metric === "low" ? "low" : "high"), // default high
+    strikeF: (m.strikeF != null ? Number(m.strikeF) : null),
+    direction: (m.direction === "LE" ? "LE" : (m.direction === "GE" ? "GE" : "")),
   }));
 }
 
-// Attempt to read top-of-book from a few common shapes.
-// If it doesn’t match, you still get the iframe + link (visual correlation).
 function extractTopOfBook(orderbookJson){
-  // We’ll try a couple patterns:
-  // A) { orderbook: { yes: { bids: [[price,qty]...], asks: [[price,qty]...] }, no: ... } }
-  // B) { yes_bids: [...], yes_asks: [...] }
   const ob = orderbookJson?.orderbook || orderbookJson;
 
   let yesBids = ob?.yes?.bids || ob?.yes_bids || ob?.yesBids || [];
   let yesAsks = ob?.yes?.asks || ob?.yes_asks || ob?.yesAsks || [];
 
-  // each level could be [price, qty] or { price, quantity }
   const bestBid = yesBids?.[0];
   const bestAsk = yesAsks?.[0];
 
@@ -338,7 +302,6 @@ function extractTopOfBook(orderbookJson){
   const bidNum = (bid == null ? null : Number(bid));
   const askNum = (ask == null ? null : Number(ask));
 
-  // If prices are in cents, normalize to 0–1
   const normalize = (x) => (x > 1 ? x/100 : x);
 
   return {
@@ -347,28 +310,19 @@ function extractTopOfBook(orderbookJson){
   };
 }
 
-function modelProbFromNwsHigh(nwsHighF, strikeF, sigmaF, direction){
-  if(nwsHighF == null || strikeF == null || !direction) return null;
-  const z = (strikeF - nwsHighF) / sigmaF;
-  const cdf = normCdf(z);
-  if(direction === "GE"){
-    return 1 - cdf; // P(T >= strike)
-  }
-  if(direction === "LE"){
-    return cdf;     // P(T <= strike)
-  }
-  return null;
-}
-
 function impliedProbFromBook(yesBid, yesAsk){
   if(yesBid == null && yesAsk == null) return null;
   if(yesBid != null && yesAsk != null) return (yesBid + yesAsk) / 2;
   return (yesBid != null ? yesBid : yesAsk);
 }
 
-function pct(x){
-  if(x == null || Number.isNaN(x)) return "—";
-  return (x*100).toFixed(1) + "%";
+function modelProbFromForecast(valueF, strikeF, sigmaF, direction){
+  if(valueF == null || strikeF == null || !direction) return null;
+  const z = (strikeF - valueF) / sigmaF;
+  const cdf = normCdf(z);
+  if(direction === "GE") return 1 - cdf; // P(T >= strike)
+  if(direction === "LE") return cdf;     // P(T <= strike)
+  return null;
 }
 
 function edgePct(modelP, marketP){
@@ -376,6 +330,29 @@ function edgePct(modelP, marketP){
   return (modelP - marketP) * 100;
 }
 
+function pct(x){
+  if(x == null || Number.isNaN(x)) return "—";
+  return (x*100).toFixed(1) + "%";
+}
+
+/* ---------------- Market view ---------------- */
+function loadMarketFrame(url){
+  const wrap = $("marketFrameWrap");
+  wrap.innerHTML = "";
+
+  const frame = document.createElement("iframe");
+  frame.src = url;
+
+  const fallback = document.createElement("div");
+  fallback.className = "tiny muted2";
+  fallback.style.marginTop = "8px";
+  fallback.innerHTML = `If the embed is blocked, <a href="${esc(url)}" target="_blank" rel="noreferrer">open this market in a new tab</a>.`;
+
+  wrap.appendChild(frame);
+  wrap.appendChild(fallback);
+}
+
+/* ---------------- Render signals ---------------- */
 function renderSignalsTable(rows){
   const minEdge = Number($("minEdge").value || 5);
   const div = document.createElement("div");
@@ -390,8 +367,9 @@ function renderSignalsTable(rows){
         <thead>
           <tr>
             <th>Market</th>
-            <th>Weather link</th>
-            <th>NWS High</th>
+            <th>City</th>
+            <th>Metric</th>
+            <th>NWS</th>
             <th>Strike</th>
             <th>Model P</th>
             <th>Market P</th>
@@ -408,12 +386,14 @@ function renderSignalsTable(rows){
               else if(edge <= -minEdge) badge = `<span class="badge b-bad">NEG</span>`;
               else badge = `<span class="badge b-warn">OK</span>`;
             }
+            const strikeTxt = (r.strikeF != null && r.direction) ? `${r.direction} ${r.strikeF}°F` : "—";
             return `
               <tr data-idx="${idx}" style="cursor:pointer">
                 <td>${esc(r.label)}</td>
                 <td>${r.cityQuery ? esc(r.cityQuery) : "—"}</td>
-                <td>${r.nwsHighF != null ? esc(r.nwsHighF.toFixed(0)+"°F") : "—"}</td>
-                <td>${r.strikeF != null ? esc(r.direction+" "+r.strikeF+"°F") : "—"}</td>
+                <td>${esc(r.metric)}</td>
+                <td>${r.nwsValueF != null ? esc(Math.round(r.nwsValueF) + "°F") : "—"}</td>
+                <td>${esc(strikeTxt)}</td>
                 <td>${r.modelP != null ? pct(r.modelP) : "—"}</td>
                 <td>${r.marketP != null ? pct(r.marketP) : "—"}</td>
                 <td>${edge != null ? (edge.toFixed(1)+"%") : "—"}</td>
@@ -438,30 +418,11 @@ function renderSignalsTable(rows){
   return div;
 }
 
-function loadMarketFrame(url){
-  const wrap = $("marketFrameWrap");
-  wrap.innerHTML = "";
-
-  const frame = document.createElement("iframe");
-  frame.src = url;
-
-  const fallback = document.createElement("div");
-  fallback.className = "tiny muted2";
-  fallback.style.marginTop = "8px";
-  fallback.innerHTML = `If the embed is blocked, <a href="${esc(url)}" target="_blank" rel="noreferrer">open this market in a new tab</a>.`;
-
-  wrap.appendChild(frame);
-  wrap.appendChild(fallback);
-}
-
-/** ---------------------------
- * Main refresh
- * -------------------------- */
+/* ---------------- Main refresh ---------------- */
 async function refreshAll(){
   $("wStatus").textContent = "Loading…";
   $("kStatus").textContent = "Loading…";
 
-  // Load inputs from storage
   $("sigma").value = load(KEY.sigma, "2.5");
   $("minEdge").value = load(KEY.minEdge, "5");
   $("proxy").value = load(KEY.proxy, "");
@@ -471,16 +432,26 @@ async function refreshAll(){
   const weatherList = $("weatherList");
   weatherList.innerHTML = "";
 
-  const weatherMapByQuery = new Map(); // query -> nwsHighF
+  // Map: cityQuery -> {highF, lowF}
+  const weatherMap = new Map();
 
   let wOk = 0;
   for(const loc of locs){
     try{
       const data = await getNwsForLocation(loc);
-      weatherList.appendChild(renderWeatherCard(loc, data));
-      // We only use the "today high" (first daytime) as the high for modeling.
-      const highF = data.high?.temperatureUnit === "F" ? Number(data.high.temperature) : null;
-      weatherMapByQuery.set(loc.query || loc.label, highF);
+      const highF = (data.high?.temperatureUnit === "F") ? Number(data.high.temperature) : null;
+      const lowF  = (data.low?.temperatureUnit  === "F") ? Number(data.low.temperature)  : null;
+
+      weatherMap.set(loc.query || loc.label, { highF, lowF });
+
+      weatherList.appendChild(renderWeatherCard(loc, data, async () => {
+        const arr = loadJSON(KEY.locs, DEFAULT_LOCS);
+        const idx = arr.findIndex(x => x.query === loc.query && x.label === loc.label);
+        if(idx >= 0) arr.splice(idx,1);
+        saveJSON(KEY.locs, arr.length ? arr : DEFAULT_LOCS);
+        await refreshAll();
+      }));
+
       wOk++;
     }catch(e){
       const err = document.createElement("div");
@@ -494,8 +465,6 @@ async function refreshAll(){
   // KALSHI
   const sigma = Number($("sigma").value || 2.5);
   const markets = normalizeMarkets(loadJSON(KEY.markets, SAMPLE_MARKETS));
-
-  // Put markets JSON in textarea (pretty)
   $("marketsJson").value = JSON.stringify(markets, null, 2);
 
   const rows = [];
@@ -511,15 +480,21 @@ async function refreshAll(){
         yesBid = tob.yesBid; yesAsk = tob.yesAsk;
         marketP = impliedProbFromBook(yesBid, yesAsk);
         kFetched++;
-      }catch(e){
-        // leave as null; still show in UI
+      }catch{
+        // ignore
       }
     }
 
-    // Link the model to a weather location if provided.
-    const nwsHighF = m.cityQuery ? (weatherMapByQuery.get(m.cityQuery) ?? null) : null;
+    // Pick NWS value based on metric
+    let nwsValueF = null;
+    if(m.cityQuery){
+      const w = weatherMap.get(m.cityQuery);
+      if(w){
+        nwsValueF = (m.metric === "low") ? w.lowF : w.highF;
+      }
+    }
 
-    const modelP = modelProbFromNwsHigh(nwsHighF, m.strikeF, sigma, m.direction);
+    const modelP = modelProbFromForecast(nwsValueF, m.strikeF, sigma, m.direction);
     const edge = edgePct(modelP, marketP);
 
     rows.push({
@@ -527,10 +502,10 @@ async function refreshAll(){
       kalshiUrl: m.kalshiUrl,
       orderbookUrl: m.orderbookUrl,
       cityQuery: m.cityQuery,
-      nwsHighF,
+      metric: m.metric,
+      nwsValueF,
       strikeF: m.strikeF,
       direction: m.direction,
-      yesBid, yesAsk,
       marketP,
       modelP,
       edge
@@ -542,14 +517,11 @@ async function refreshAll(){
   signals.appendChild(renderSignalsTable(rows));
   $("kStatus").textContent = `Markets: ${markets.length} • Prices fetched: ${kFetched}`;
 
-  // Load selected market view
   const sel = load(KEY.selectedMarket, markets[0]?.kalshiUrl || "https://kalshi.com/");
   loadMarketFrame(sel);
 }
 
-/** ---------------------------
- * Wire UI
- * -------------------------- */
+/* ---------------- UI wiring ---------------- */
 $("save").onclick = () => {
   save(KEY.sigma, $("sigma").value.trim());
   save(KEY.minEdge, $("minEdge").value.trim());
@@ -580,7 +552,7 @@ $("saveMarkets").onclick = async () => {
     saveJSON(KEY.markets, parsed);
     alert("Saved markets.");
     await refreshAll();
-  }catch(e){
+  }catch{
     alert("Markets JSON is not valid. Fix it and try again.");
   }
 };
@@ -590,7 +562,6 @@ $("loadSample").onclick = () => {
 };
 
 (function init(){
-  // init storage if empty
   if(!localStorage.getItem(KEY.locs)) saveJSON(KEY.locs, DEFAULT_LOCS);
   if(!localStorage.getItem(KEY.markets)) saveJSON(KEY.markets, SAMPLE_MARKETS);
   $("sigma").value = load(KEY.sigma, "2.5");
